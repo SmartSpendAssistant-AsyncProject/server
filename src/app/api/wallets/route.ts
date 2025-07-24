@@ -64,3 +64,24 @@ export async function POST(request: NextRequest) {
     return Response.json({ message }, { status });
   }
 }
+
+// GET /api/wallets - Get authorize user wallets
+export async function GET(request: NextRequest) {
+  try {
+    const user_id = request.headers.get("x-user-id");
+    if (!user_id || !ObjectId.isValid(user_id)) {
+      throw new CustomError("Invalid user ID", 400);
+    }
+
+    const wallets = await Wallet.where("user_id", new ObjectId(user_id)).all();
+
+    return NextResponse.json({
+      success: true,
+      data: wallets,
+    });
+  } catch (error) {
+    console.log("🚀 ~ GET ~ error:", error);
+    const { message, status } = errorHandler(error);
+    return Response.json({ message }, { status });
+  }
+}
