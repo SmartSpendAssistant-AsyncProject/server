@@ -14,12 +14,12 @@ export interface ITransaction
   name: string;
   description: string;
   ammount: number;
-  date: string;
+  date: Date;
   category_id: ObjectId;
   wallet_id: ObjectId;
-  parent_id: ObjectId;
+  parent_id?: ObjectId;
   remaining_ammount: number;
-  message_id: ObjectId;
+  message_id?: ObjectId;
 }
 
 export default class Transaction extends Model<ITransaction> {

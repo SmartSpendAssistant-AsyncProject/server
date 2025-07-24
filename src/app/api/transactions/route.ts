@@ -68,11 +68,16 @@ export async function POST(request: NextRequest) {
     // Create transaction in a transaction block
     // This ensures that if any part fails, the entire operation is rolled back
     await DB.transaction(async (session) => {
+      // Create Date object for better date handling and filtering
+      const transactionDate = new Date(
+        `${validatedData.date}T${new Date().toISOString().slice(11)}`
+      );
+
       const transactionData = {
         name: validatedData.name,
         description: validatedData.description,
         ammount: validatedData.ammount,
-        date: validatedData.date,
+        date: transactionDate, // Store as Date object for better $gte/$lte filtering
         category_id: new ObjectId(validatedData.category_id),
         wallet_id: new ObjectId(validatedData.wallet_id),
         parent_id: validatedData.parent_id
