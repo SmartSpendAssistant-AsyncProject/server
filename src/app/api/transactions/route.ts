@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import Transaction, { ITransaction } from "@/models/Transaction";
+import Transaction from "@/models/Transaction";
 import Wallet from "@/models/Wallet";
 import { z } from "zod";
 import errorHandler from "@/helpers/handleError";
 import { ObjectId } from "mongodb";
-import Category, { ICategory } from "@/models/Category";
+import Category from "@/models/Category";
 import CustomError from "@/helpers/CustomError";
 import { DB } from "mongoloquent";
 
