@@ -3,6 +3,7 @@ import Wallet from "@/models/Wallet";
 import { z } from "zod";
 import errorHandler from "@/helpers/handleError";
 import { ObjectId } from "mongodb";
+import CustomError from "@/helpers/CustomError";
 
 // Validation schema
 const walletSchema = z.object({
@@ -28,6 +29,13 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
+    // Get user_id from middleware header
+    const user_id = request.headers.get("x-user-id");
+    if (!user_id || !ObjectId.isValid(user_id)) {
+      throw new CustomError("Invalid user ID", 400);
+    }
+    body.user_id = user_id;
+
     // Validate input data
     const validatedData = walletSchema.parse(body);
 
@@ -51,6 +59,7 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     );
   } catch (error) {
+    console.log("🚀 ~ POST ~ error:", error);
     const { message, status } = errorHandler(error);
     return Response.json({ message }, { status });
   }
