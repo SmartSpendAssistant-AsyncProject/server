@@ -75,10 +75,7 @@ export async function GET(request: NextRequest) {
 
     const wallets = await Wallet.where("user_id", new ObjectId(user_id)).all();
 
-    return NextResponse.json({
-      success: true,
-      data: wallets,
-    });
+    return NextResponse.json(wallets);
   } catch (error) {
     console.log("🚀 ~ GET ~ error:", error);
     const { message, status } = errorHandler(error);
