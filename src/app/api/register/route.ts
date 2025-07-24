@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import User from "@/models/User";
+import Category from "@/models/Category";
+import MasterCategory from "@/models/MasterCategory";
 import errorHandler from "@/helpers/handleError";
 import { z } from "zod";
 import { hashPassword } from "@/helpers/bcrypt";
 import CustomError from "@/helpers/CustomError";
+import { ObjectId } from "mongodb";
 
 // Validation schema
 const registerSchema = z.object({
@@ -36,6 +39,42 @@ const registerSchema = z.object({
   trial_due_date: z.string().optional(),
 });
 
+/**
+ * Create default categories for new user based on MasterCategory data
+ */
+async function createDefaultCategories(userId: ObjectId) {
+  try {
+    // Get all master categories
+    const masterCategories = await MasterCategory.all();
+
+    if (masterCategories.length === 0) {
+      console.log("No master categories found, skipping category creation");
+      return;
+    }
+
+    // Create user categories based on master categories
+    const categoryPromises = masterCategories.map(async (masterCategory) => {
+      const categoryData = {
+        name: masterCategory.name,
+        type: masterCategory.type,
+        user_id: userId,
+      };
+
+      return await Category.create(categoryData);
+    });
+
+    // Execute all category creation in parallel
+    await Promise.all(categoryPromises);
+
+    console.log(
+      `Created ${masterCategories.length} default categories for user ${userId}`
+    );
+  } catch (error) {
+    console.error("Error creating default categories:", error);
+    // Don't throw error here, just log it as category creation is not critical for registration
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -65,7 +104,12 @@ export async function POST(request: NextRequest) {
       password: hashedPassword,
     };
 
-    await User.create(userData);
+    const newUser = await User.create(userData);
+
+    // Create default categories for the new user
+    if (newUser._id) {
+      await createDefaultCategories(newUser._id);
+    }
 
     return NextResponse.json(
       {
