@@ -174,12 +174,56 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
       // Get old and new category information
       const oldCategory = await Category.find(oldCategoryId);
-      const newCategory = body.category_id
-        ? await Category.find(body.category_id)
+      const newCategory = validatedData.category_id
+        ? await Category.find(validatedData.category_id)
         : oldCategory;
 
       if (!oldCategory || !newCategory) {
         throw new CustomError("Category not found", 404);
+      }
+
+      // Calculate remaining_amount for debt and loan types
+      let calculatedRemainingAmount = 0;
+      if (newCategory.type === "debt" || newCategory.type === "loan") {
+        // Get all child transactions (payments/repayments) for this debt/loan
+        // Context:
+        // - For DEBT: child transactions are repayments (type: expense)
+        // - For LOAN: child transactions are debt collections (type: income)
+        const childTransactions = await Transaction.where(
+          "parent_id",
+          id
+        ).get();
+
+        // Calculate total payments made (sum of child transactions)
+        // This represents either:
+        // - Total repayments made for debt (reduces remaining debt)
+        // - Total collections received for loan (reduces remaining loan)
+        const totalPayments = childTransactions.reduce(
+          (sum, child) => sum + child.ammount,
+          0
+        );
+
+        // Calculate remaining amount: total debt/loan - total payments
+        calculatedRemainingAmount = validatedData.ammount - totalPayments;
+
+        // Validate calculated remaining amount
+        if (calculatedRemainingAmount < 0) {
+          throw new CustomError(
+            `Total payments (${totalPayments}) exceed the ${newCategory.type} amount (${validatedData.ammount}). Remaining amount cannot be negative.`,
+            400
+          );
+        }
+
+        // If user provided remaining_amount, validate it matches calculated value
+        if (
+          validatedData.remaining_ammount !== undefined &&
+          validatedData.remaining_ammount !== calculatedRemainingAmount
+        ) {
+          throw new CustomError(
+            `Provided remaining amount (${validatedData.remaining_ammount}) does not match calculated remaining amount (${calculatedRemainingAmount}) based on existing payments`,
+            400
+          );
+        }
       }
 
       // Calculate wallet balance adjustment
@@ -196,7 +240,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       }
 
       // Apply the new transaction effect
-      const newAmount = body.ammount || oldAmount;
+      const newAmount = validatedData.ammount;
       if (newCategory.type === "income" || newCategory.type === "debt") {
         balanceAdjustment += newAmount; // Add new income/debt
       } else if (
@@ -213,6 +257,69 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
           { session }
         );
       }
+
+      // Set remaining_amount based on category type
+      let remainingAmount = 0;
+      if (newCategory.type === "debt" || newCategory.type === "loan") {
+        // Use calculated remaining amount based on child transactions
+        remainingAmount = calculatedRemainingAmount;
+      }
+
+      // If this transaction has a parent_id, update parent's remaining_amount
+      if (validatedData.parent_id || transaction.parent_id) {
+        const parentId =
+          validatedData.parent_id || transaction.parent_id?.toString();
+
+        if (parentId) {
+          // Get parent transaction
+          const parentTransaction = await Transaction.with("categories")
+            .where("_id", parentId)
+            .first();
+          if (
+            parentTransaction &&
+            parentTransaction.categories &&
+            (parentTransaction.categories.type === "debt" ||
+              parentTransaction.categories.type === "loan")
+          ) {
+            // Get all child transactions for the parent (including this updated one)
+            const allChildTransactions = await Transaction.where(
+              "parent_id",
+              parentId
+            ).get();
+
+            // Calculate total payments from all children
+            let totalChildPayments = 0;
+            for (const child of allChildTransactions) {
+              if (child._id.toString() === id) {
+                // Use the new amount for this transaction being updated
+                totalChildPayments += validatedData.ammount;
+              } else {
+                // Use existing amount for other children
+                totalChildPayments += child.ammount;
+              }
+            }
+
+            // Calculate new remaining amount for parent
+            const newParentRemainingAmount =
+              parentTransaction.ammount - totalChildPayments;
+
+            // Validate that remaining amount doesn't go negative
+            if (newParentRemainingAmount < 0) {
+              throw new CustomError(
+                `Total child payments (${totalChildPayments}) would exceed parent ${parentTransaction.categories.type} amount (${parentTransaction.ammount}). Cannot update transaction.`,
+                400
+              );
+            }
+
+            // Update parent transaction's remaining_amount
+            await Transaction.where("_id", parentId).update(
+              { remaining_ammount: newParentRemainingAmount },
+              { session }
+            );
+          }
+        }
+      }
+
       const transactionData = {
         name: validatedData.name,
         description: validatedData.description,
@@ -223,7 +330,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         parent_id: validatedData.parent_id
           ? new ObjectId(validatedData.parent_id)
           : undefined,
-        remaining_ammount: validatedData.remaining_ammount || 0,
+        remaining_ammount: remainingAmount,
         message_id: validatedData.message_id
           ? new ObjectId(validatedData.message_id)
           : undefined,
@@ -274,6 +381,47 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     }
 
     await DB.transaction(async (session) => {
+      // If this transaction has a parent_id, update parent's remaining_amount after deletion
+      if (transaction.parent_id) {
+        const parentId = transaction.parent_id.toString();
+
+        // Get parent transaction
+        const parentTransaction = await Transaction.with("categories")
+          .where("_id", parentId)
+          .first();
+
+        if (
+          parentTransaction &&
+          parentTransaction.categories &&
+          (parentTransaction.categories.type === "debt" ||
+            parentTransaction.categories.type === "loan")
+        ) {
+          // Get all OTHER child transactions for the parent (excluding this one being deleted)
+          const remainingChildTransactions = await Transaction.where(
+            "parent_id",
+            parentId
+          )
+            .where("_id", "!=", id)
+            .get();
+
+          // Calculate total payments from remaining children
+          const totalRemainingPayments = remainingChildTransactions.reduce(
+            (sum, child) => sum + child.ammount,
+            0
+          );
+
+          // Calculate new remaining amount for parent
+          const newParentRemainingAmount =
+            parentTransaction.ammount - totalRemainingPayments;
+
+          // Update parent transaction's remaining_amount
+          await Transaction.where("_id", parentId).update(
+            { remaining_ammount: newParentRemainingAmount },
+            { session }
+          );
+        }
+      }
+
       // Delete children transactions first
       const children = await Transaction.where("parent_id", id).get();
       if (children && children.length > 0) {
