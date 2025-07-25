@@ -18,86 +18,21 @@ interface RouteParams {
 const updateTransactionSchema = z.object({
   name: z
     .string()
+    .nonempty("Name is required")
     .min(2, "Name must be at least 2 characters long")
-    .max(100, "Name must not exceed 100 characters")
-    .optional(),
-  description: z.string().optional(),
-  ammount: z.number().positive("Amount must be a positive number").optional(),
+    .max(100, "Name must not exceed 100 characters"),
+  description: z.string().optional().default(""),
+  ammount: z.number().positive("Amount must be a positive number"),
   date: z
     .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format")
-    .optional(),
-  category_id: z.string().optional(),
-  wallet_id: z.string().optional(),
+    .nonempty("Date is required")
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format"),
+  category_id: z.string().nonempty("Category ID is required"),
+  wallet_id: z.string().nonempty("Wallet ID is required"),
   parent_id: z.string().optional(),
   remaining_ammount: z.number().optional(),
   message_id: z.string().optional(),
 });
-
-// Helper function to validate update transaction data
-async function validateUpdateTransaction(
-  validatedData: any,
-  transactionId: string,
-  userId: string
-) {
-  // Validate ObjectId format for all ID fields
-  if (
-    validatedData.category_id &&
-    !ObjectId.isValid(validatedData.category_id)
-  ) {
-    throw new CustomError("Invalid category ID format", 400);
-  }
-
-  if (validatedData.wallet_id && !ObjectId.isValid(validatedData.wallet_id)) {
-    throw new CustomError("Invalid wallet ID format", 400);
-  }
-
-  if (validatedData.parent_id && !ObjectId.isValid(validatedData.parent_id)) {
-    throw new CustomError("Invalid parent ID format", 400);
-  }
-
-  if (validatedData.message_id && !ObjectId.isValid(validatedData.message_id)) {
-    throw new CustomError("Invalid message ID format", 400);
-  }
-
-  // Get the transaction
-  const transaction = await Transaction.with("categories")
-    .where("_id", transactionId)
-    .first();
-  if (!transaction) {
-    throw new CustomError("Transaction not found", 404);
-  }
-
-  // Check if transaction belongs to user (via wallet ownership)
-  const wallet = await Wallet.find(transaction.wallet_id);
-  if (!wallet || wallet.user_id.toString() !== userId) {
-    throw new CustomError("Unauthorized access to transaction", 403);
-  }
-
-  // If wallet_id is being changed, check new wallet ownership
-  if (
-    validatedData.wallet_id &&
-    validatedData.wallet_id !== transaction.wallet_id.toString()
-  ) {
-    const newWallet = await Wallet.find(validatedData.wallet_id);
-    if (!newWallet || newWallet.user_id.toString() !== userId) {
-      throw new CustomError("Unauthorized access to new wallet", 403);
-    }
-  }
-
-  // If category_id is being changed, check new category ownership
-  if (
-    validatedData.category_id &&
-    validatedData.category_id !== transaction.category_id.toString()
-  ) {
-    const newCategory = await Category.find(validatedData.category_id);
-    if (!newCategory || newCategory.user_id.toString() !== userId) {
-      throw new CustomError("Unauthorized access to new category", 403);
-    }
-  }
-
-  return { transaction };
-}
 
 // GET /api/transactions/[id] - Get transaction by ID
 export async function GET(request: NextRequest, { params }: RouteParams) {
@@ -116,8 +51,8 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     const transaction = await Transaction.with("categories")
       .with("wallet")
-      .with("parent.categories")
-      .with("children.categories")
+      .with("parent")
+      .with("children")
       .where("_id", new ObjectId(id))
       .first();
 
@@ -157,22 +92,90 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       throw new CustomError("Invalid transaction ID", 400);
     }
 
-    // Validate transaction and permissions using helper function
-    const { transaction } = await validateUpdateTransaction(
-      validatedData,
-      id,
-      user_id
-    );
+    // Validate ObjectId format for category_id and wallet_id if provided
+    if (
+      validatedData.category_id &&
+      !ObjectId.isValid(validatedData.category_id)
+    ) {
+      throw new CustomError("Invalid category ID format", 400);
+    }
+
+    if (validatedData.wallet_id && !ObjectId.isValid(validatedData.wallet_id)) {
+      throw new CustomError("Invalid wallet ID format", 400);
+    }
+
+    if (validatedData.parent_id && !ObjectId.isValid(validatedData.parent_id)) {
+      throw new CustomError("Invalid parent ID format", 400);
+    }
+
+    if (
+      validatedData.message_id &&
+      !ObjectId.isValid(validatedData.message_id)
+    ) {
+      throw new CustomError("Invalid message ID format", 400);
+    }
+
+    const transaction = await Transaction.with("categories")
+      .where("_id", id)
+      .first();
+    if (!transaction) {
+      throw new CustomError("Transaction not found", 404);
+    }
+
+    // Check if transaction belongs to user (via wallet ownership)
+    const wallet = await Wallet.find(transaction.wallet_id);
+    if (!wallet || wallet.user_id.toString() !== user_id) {
+      throw new CustomError("Unauthorized access to transaction", 403);
+    }
+
+    // If wallet_id is being changed, check new wallet ownership
+    if (
+      validatedData.wallet_id &&
+      validatedData.wallet_id !== transaction.wallet_id.toString()
+    ) {
+      const newWallet = await Wallet.find(validatedData.wallet_id);
+      if (!newWallet || newWallet.user_id.toString() !== user_id) {
+        throw new CustomError("Unauthorized access to new wallet", 403);
+      }
+    }
+
+    // If category_id is being changed, check new category ownership
+    if (
+      validatedData.category_id &&
+      validatedData.category_id !== transaction.category_id.toString()
+    ) {
+      const newCategory = await Category.find(validatedData.category_id);
+      if (!newCategory || newCategory.user_id.toString() !== user_id) {
+        throw new CustomError("Unauthorized access to new category", 403);
+      }
+    }
 
     await DB.transaction(async (session) => {
+      const oldTransactionDate = transaction.date
+        ? transaction.date.toISOString().slice(0, 10)
+        : new Date().toISOString().slice(0, 10);
+
+      let transactionDate: Date;
+
+      if (oldTransactionDate === validatedData.date) {
+        // If the date is the same, keep the original time
+        transactionDate = transaction.date || new Date();
+      } else {
+        // If the date is different, use new date but keep the old time
+        const oldTime = transaction.date
+          ? transaction.date.toISOString().slice(11)
+          : new Date().toISOString().slice(11);
+        transactionDate = new Date(`${validatedData.date}T${oldTime}`);
+      }
+
       // Get old values before update
       const oldAmount = transaction.ammount;
       const oldCategoryId = transaction.category_id;
 
       // Get old and new category information
       const oldCategory = await Category.find(oldCategoryId);
-      const newCategory = validatedData.category_id
-        ? await Category.find(validatedData.category_id)
+      const newCategory = body.category_id
+        ? await Category.find(body.category_id)
         : oldCategory;
 
       if (!oldCategory || !newCategory) {
@@ -193,7 +196,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       }
 
       // Apply the new transaction effect
-      const newAmount = validatedData.ammount || oldAmount;
+      const newAmount = body.ammount || oldAmount;
       if (newCategory.type === "income" || newCategory.type === "debt") {
         balanceAdjustment += newAmount; // Add new income/debt
       } else if (
@@ -203,98 +206,37 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         balanceAdjustment -= newAmount; // Add new expense/loan
       }
 
-      // Prepare update data with proper type conversions
-      const updateData: any = { ...validatedData };
-
-      // Convert date string to Date object if provided
-      if (validatedData.date) {
-        updateData.date = new Date(
-          `${validatedData.date}T${new Date().toISOString().slice(11)}`
-        );
-      }
-
-      // Convert string IDs to ObjectId if provided
-      if (validatedData.category_id) {
-        updateData.category_id = new ObjectId(validatedData.category_id);
-      }
-      if (validatedData.wallet_id) {
-        updateData.wallet_id = new ObjectId(validatedData.wallet_id);
-      }
-      if (validatedData.parent_id) {
-        updateData.parent_id = new ObjectId(validatedData.parent_id);
-      }
-      if (validatedData.message_id) {
-        updateData.message_id = new ObjectId(validatedData.message_id);
-      }
-
-      // Handle wallet balance update for wallet changes
-      const currentWallet = await Wallet.find(transaction.wallet_id);
-      let targetWallet = currentWallet;
-
-      if (
-        validatedData.wallet_id &&
-        validatedData.wallet_id !== transaction.wallet_id.toString()
-      ) {
-        // Moving transaction to different wallet
-        targetWallet = await Wallet.find(validatedData.wallet_id);
-
-        // Remove effect from old wallet
-        if (oldCategory.type === "income" || oldCategory.type === "debt") {
-          currentWallet.balance -= oldAmount;
-        } else if (
-          oldCategory.type === "expense" ||
-          oldCategory.type === "loan"
-        ) {
-          currentWallet.balance += oldAmount;
-        }
-
-        // Add effect to new wallet
-        if (newCategory.type === "income" || newCategory.type === "debt") {
-          targetWallet.balance += newAmount;
-        } else if (
-          newCategory.type === "expense" ||
-          newCategory.type === "loan"
-        ) {
-          targetWallet.balance -= newAmount;
-        }
-
-        // Update both wallets
-        await Wallet.where("_id", currentWallet._id).update(
-          { balance: currentWallet.balance },
+      // Update wallet balance if there's a change
+      if (balanceAdjustment !== 0) {
+        await Wallet.where("_id", wallet._id).update(
+          { balance: wallet.balance + balanceAdjustment },
           { session }
         );
-        await Wallet.where("_id", targetWallet._id).update(
-          { balance: targetWallet.balance },
-          { session }
-        );
-      } else {
-        // Same wallet, just adjust balance
-        if (balanceAdjustment !== 0) {
-          await Wallet.where("_id", targetWallet._id).update(
-            { balance: targetWallet.balance + balanceAdjustment },
-            { session }
-          );
-        }
       }
-
+      const transactionData = {
+        name: validatedData.name,
+        description: validatedData.description,
+        ammount: validatedData.ammount,
+        date: transactionDate, // Store as Date object for better $gte/$lte filtering
+        category_id: new ObjectId(validatedData.category_id),
+        wallet_id: new ObjectId(validatedData.wallet_id),
+        parent_id: validatedData.parent_id
+          ? new ObjectId(validatedData.parent_id)
+          : undefined,
+        remaining_ammount: validatedData.remaining_ammount || 0,
+        message_id: validatedData.message_id
+          ? new ObjectId(validatedData.message_id)
+          : undefined,
+      };
       // Update transaction
-      const updatedTransaction = await Transaction.where("_id", id).update(
-        updateData,
-        { session }
-      );
-
-      return updatedTransaction;
+      await Transaction.where("_id", id).update(transactionData, { session });
     });
 
     // Get updated transaction with relations for response
-    const updatedTransaction = await Transaction.with("categories")
-      .with("wallet")
-      .where("_id", id)
-      .first();
 
     return NextResponse.json({
       message: "Transaction updated successfully",
-      data: updatedTransaction,
+      // data: updatedTransaction,
     });
   } catch (error) {
     const { message, status } = errorHandler(error);

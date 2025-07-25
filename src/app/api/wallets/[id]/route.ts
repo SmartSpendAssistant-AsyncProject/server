@@ -98,7 +98,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     }
 
     // Update wallet properties with validated data
-    const updatedWallet = await Wallet.where("_id", new ObjectId(id))
+    await Wallet.where("_id", new ObjectId(id))
       .where("user_id", new ObjectId(user_id))
       .update(validatedData);
 
