@@ -138,7 +138,7 @@ export async function GET(request: NextRequest) {
     const year = searchParams.get("year"); // Format: YYYY
 
     // Start with transactions from this specific wallet
-    let query = Transaction.with("categories");
+    let query = Transaction.with("wallet").with("categories");
 
     // Apply filters
     if (wallet_id) {
@@ -157,7 +157,7 @@ export async function GET(request: NextRequest) {
         throw new CustomError("Unauthorized access to wallet", 403);
       }
 
-      query = query.with("wallet").where("wallet_id", new ObjectId(wallet_id));
+      query = query.where("wallet_id", new ObjectId(wallet_id));
     }
     if (category_id) {
       if (!ObjectId.isValid(category_id)) {
@@ -256,6 +256,7 @@ export async function GET(request: NextRequest) {
         year: year || null,
         category_id: category_id || null,
         parent_id: parent_id || null,
+        wallet_id: wallet_id || null,
       },
     });
   } catch (error) {
