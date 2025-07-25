@@ -73,6 +73,10 @@ export async function POST(request: NextRequest) {
         `${validatedData.date}T${new Date().toISOString().slice(11)}`
       );
 
+      if (category.type === "debt" || category.type === "loan") {
+        validatedData.remaining_ammount = validatedData.ammount;
+      }
+
       const transactionData = {
         name: validatedData.name,
         description: validatedData.description,
