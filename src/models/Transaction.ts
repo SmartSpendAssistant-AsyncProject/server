@@ -5,7 +5,7 @@ import {
   IMongoloquentTimestamps,
 } from "mongoloquent";
 import Wallet from "./Wallet";
-import Category from "./Category";
+import Category, { ICategory } from "./Category";
 import Message from "./Message";
 
 export interface ITransaction
@@ -38,10 +38,10 @@ export default class Transaction extends Model<ITransaction> {
     return this.belongsTo(Category, "category_id");
   }
   public parent() {
-    return this.belongsTo(Transaction, "parent_id");
+    return this.belongsTo(Transaction, "parent_id", "_id");
   }
   public children() {
-    return this.hasMany(Transaction, "parent_id");
+    return this.hasMany(Transaction, "parent_id", "_id");
   }
   public message() {
     return this.belongsTo(Message, "message_id");
