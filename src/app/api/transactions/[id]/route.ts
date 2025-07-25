@@ -174,12 +174,56 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
       // Get old and new category information
       const oldCategory = await Category.find(oldCategoryId);
-      const newCategory = body.category_id
-        ? await Category.find(body.category_id)
+      const newCategory = validatedData.category_id
+        ? await Category.find(validatedData.category_id)
         : oldCategory;
 
       if (!oldCategory || !newCategory) {
         throw new CustomError("Category not found", 404);
+      }
+
+      // Calculate remaining_amount for debt and loan types
+      let calculatedRemainingAmount = 0;
+      if (newCategory.type === "debt" || newCategory.type === "loan") {
+        // Get all child transactions (payments/repayments) for this debt/loan
+        // Context:
+        // - For DEBT: child transactions are repayments (type: expense)
+        // - For LOAN: child transactions are debt collections (type: income)
+        const childTransactions = await Transaction.where(
+          "parent_id",
+          id
+        ).get();
+
+        // Calculate total payments made (sum of child transactions)
+        // This represents either:
+        // - Total repayments made for debt (reduces remaining debt)
+        // - Total collections received for loan (reduces remaining loan)
+        const totalPayments = childTransactions.reduce(
+          (sum, child) => sum + child.ammount,
+          0
+        );
+
+        // Calculate remaining amount: total debt/loan - total payments
+        calculatedRemainingAmount = validatedData.ammount - totalPayments;
+
+        // Validate calculated remaining amount
+        if (calculatedRemainingAmount < 0) {
+          throw new CustomError(
+            `Total payments (${totalPayments}) exceed the ${newCategory.type} amount (${validatedData.ammount}). Remaining amount cannot be negative.`,
+            400
+          );
+        }
+
+        // If user provided remaining_amount, validate it matches calculated value
+        if (
+          validatedData.remaining_ammount !== undefined &&
+          validatedData.remaining_ammount !== calculatedRemainingAmount
+        ) {
+          throw new CustomError(
+            `Provided remaining amount (${validatedData.remaining_ammount}) does not match calculated remaining amount (${calculatedRemainingAmount}) based on existing payments`,
+            400
+          );
+        }
       }
 
       // Calculate wallet balance adjustment
@@ -196,7 +240,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       }
 
       // Apply the new transaction effect
-      const newAmount = body.ammount || oldAmount;
+      const newAmount = validatedData.ammount;
       if (newCategory.type === "income" || newCategory.type === "debt") {
         balanceAdjustment += newAmount; // Add new income/debt
       } else if (
@@ -213,6 +257,14 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
           { session }
         );
       }
+
+      // Set remaining_amount based on category type
+      let remainingAmount = 0;
+      if (newCategory.type === "debt" || newCategory.type === "loan") {
+        // Use calculated remaining amount based on child transactions
+        remainingAmount = calculatedRemainingAmount;
+      }
+
       const transactionData = {
         name: validatedData.name,
         description: validatedData.description,
@@ -223,7 +275,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         parent_id: validatedData.parent_id
           ? new ObjectId(validatedData.parent_id)
           : undefined,
-        remaining_ammount: validatedData.remaining_ammount || 0,
+        remaining_ammount: remainingAmount,
         message_id: validatedData.message_id
           ? new ObjectId(validatedData.message_id)
           : undefined,
