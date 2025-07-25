@@ -20,6 +20,7 @@ export interface ITransaction
   parent_id?: ObjectId;
   remaining_ammount: number;
   message_id?: ObjectId;
+  categories?: ICategory; // Optional, populated via relationships
 }
 
 export default class Transaction extends Model<ITransaction> {

@@ -3,10 +3,14 @@ import {
   Model,
   IMongoloquentSchema,
   IMongoloquentTimestamps,
+  IMongoloquentSoftDelete,
 } from "mongoloquent";
 import User from "./User";
 
-export interface IWallet extends IMongoloquentSchema, IMongoloquentTimestamps {
+export interface IWallet
+  extends IMongoloquentSchema,
+    IMongoloquentTimestamps,
+    IMongoloquentSoftDelete {
   name: string;
   description: string;
   type: string;
@@ -25,6 +29,8 @@ export default class Wallet extends Model<IWallet> {
   public static $schema: IWallet;
 
   protected $collection: string = "wallets";
+
+  protected $useSoftDelete: boolean = true;
 
   public user() {
     return this.belongsTo(User, "user_id");
