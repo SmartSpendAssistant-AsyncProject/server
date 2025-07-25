@@ -381,6 +381,47 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     }
 
     await DB.transaction(async (session) => {
+      // If this transaction has a parent_id, update parent's remaining_amount after deletion
+      if (transaction.parent_id) {
+        const parentId = transaction.parent_id.toString();
+
+        // Get parent transaction
+        const parentTransaction = await Transaction.with("categories")
+          .where("_id", parentId)
+          .first();
+
+        if (
+          parentTransaction &&
+          parentTransaction.categories &&
+          (parentTransaction.categories.type === "debt" ||
+            parentTransaction.categories.type === "loan")
+        ) {
+          // Get all OTHER child transactions for the parent (excluding this one being deleted)
+          const remainingChildTransactions = await Transaction.where(
+            "parent_id",
+            parentId
+          )
+            .where("_id", "!=", id)
+            .get();
+
+          // Calculate total payments from remaining children
+          const totalRemainingPayments = remainingChildTransactions.reduce(
+            (sum, child) => sum + child.ammount,
+            0
+          );
+
+          // Calculate new remaining amount for parent
+          const newParentRemainingAmount =
+            parentTransaction.ammount - totalRemainingPayments;
+
+          // Update parent transaction's remaining_amount
+          await Transaction.where("_id", parentId).update(
+            { remaining_ammount: newParentRemainingAmount },
+            { session }
+          );
+        }
+      }
+
       // Delete children transactions first
       const children = await Transaction.where("parent_id", id).get();
       if (children && children.length > 0) {
