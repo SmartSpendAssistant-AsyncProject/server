@@ -28,93 +28,143 @@ const transactionSchema = z.object({
   message_id: z.string().optional(),
 });
 
-// POST /api/transactions - Create new transaction
-export async function POST(request: NextRequest) {
+// GET /api/wallets/[id]/transactions - Get transactions for specific wallet
+export async function GET(request: NextRequest) {
   try {
-    const body = await request.json();
-
     // Get user_id from middleware header
     const user_id = request.headers.get("x-user-id");
-    if (!user_id || !ObjectId.isValid(user_id))
+    if (!user_id || !ObjectId.isValid(user_id)) {
       throw new CustomError("Invalid user ID", 400);
+    }
 
-    // Validate input data
-    const validatedData = transactionSchema.parse(body);
+    const { searchParams } = new URL(request.url);
+    const wallet_id = searchParams.get("wallet_id");
+    const category_id = searchParams.get("category_id");
+    const parent_id = searchParams.get("parent_id");
+    const month = searchParams.get("month"); // Format: YYYY-MM
+    const year = searchParams.get("year"); // Format: YYYY
 
-    // Validate ObjectId format for category_id and wallet_id
-    if (!ObjectId.isValid(validatedData.category_id))
-      throw new CustomError("Invalid category ID format", 400);
+    // Start with transactions from this specific wallet
+    let query = Transaction.with("categories");
 
-    if (!ObjectId.isValid(validatedData.wallet_id))
-      throw new CustomError("Invalid wallet ID format", 400);
+    // Apply filters
+    if (wallet_id) {
+      // Validate wallet ID
+      if (!ObjectId.isValid(wallet_id)) {
+        throw new CustomError("Invalid wallet ID", 400);
+      }
 
-    // Check if wallet belongs to user
-    const wallet = await Wallet.where("_id", validatedData.wallet_id).first();
-    if (!wallet) throw new CustomError("Wallet not found", 404);
+      // Check if wallet exists and belongs to user
+      const wallet = await Wallet.find(wallet_id);
+      if (!wallet) {
+        throw new CustomError("Wallet not found", 404);
+      }
 
-    if (wallet.user_id.toString() !== user_id)
-      throw new CustomError("Unauthorized access to wallet", 403);
+      if (wallet.user_id.toString() !== user_id) {
+        throw new CustomError("Unauthorized access to wallet", 403);
+      }
 
-    // Check if category belongs to user
-    const category = await Category.where(
-      "_id",
-      validatedData.category_id
-    ).first();
-    if (!category) throw new CustomError("Category not found", 404);
+      query = query.with("wallet").where("wallet_id", new ObjectId(wallet_id));
+    }
+    if (category_id) {
+      if (!ObjectId.isValid(category_id)) {
+        throw new CustomError("Invalid category ID format", 400);
+      }
+      query = query.where("category_id", new ObjectId(category_id));
+    }
 
-    if (category.user_id.toString() !== user_id)
-      throw new CustomError("Unauthorized access to category", 403);
+    if (parent_id) {
+      if (!ObjectId.isValid(parent_id)) {
+        throw new CustomError("Invalid parent ID format", 400);
+      }
+      query = query.where("parent_id", new ObjectId(parent_id));
+    }
 
-    // Create transaction in a transaction block
-    // This ensures that if any part fails, the entire operation is rolled back
-    await DB.transaction(async (session) => {
-      // Create Date object for better date handling and filtering
-      const transactionDate = new Date(
-        `${validatedData.date}T${new Date().toISOString().slice(11)}`
+    // Month and Year filtering
+    if (month) {
+      // Validate month format (YYYY-MM)
+      if (!/^\d{4}-\d{2}$/.test(month)) {
+        throw new CustomError("Invalid month format. Use YYYY-MM", 400);
+      }
+
+      const [yearFromMonth, monthNumber] = month.split("-");
+      const startDate = new Date(
+        `${yearFromMonth}-${monthNumber}-01T00:00:00.000Z`
       );
 
-      if (category.type === "debt" || category.type === "loan") {
-        validatedData.remaining_ammount = validatedData.ammount;
+      // Calculate last day of the month properly
+      const nextMonth = new Date(
+        parseInt(yearFromMonth),
+        parseInt(monthNumber), // monthNumber is already 1-based from input
+        0 // Day 0 gives us the last day of previous month
+      );
+      const endDate = new Date(
+        parseInt(yearFromMonth),
+        parseInt(monthNumber) - 1, // Convert to 0-based month
+        nextMonth.getDate(),
+        23,
+        59,
+        59,
+        999
+      );
+
+      query = query.where("date", ">=", startDate).where("date", "<=", endDate);
+    } else if (year) {
+      // Validate year format (YYYY)
+      if (!/^\d{4}$/.test(year)) {
+        throw new CustomError("Invalid year format. Use YYYY", 400);
       }
 
-      const transactionData = {
-        name: validatedData.name,
-        description: validatedData.description,
-        ammount: validatedData.ammount,
-        date: transactionDate, // Store as Date object for better $gte/$lte filtering
-        category_id: new ObjectId(validatedData.category_id),
-        wallet_id: new ObjectId(validatedData.wallet_id),
-        parent_id: validatedData.parent_id
-          ? new ObjectId(validatedData.parent_id)
-          : undefined,
-        remaining_ammount: validatedData.remaining_ammount || 0,
-        message_id: validatedData.message_id
-          ? new ObjectId(validatedData.message_id)
-          : undefined,
-      };
+      const startDate = new Date(`${year}-01-01T00:00:00.000Z`);
+      const endDate = new Date(`${year}-12-31T23:59:59.999Z`);
 
-      // Create transaction
-      await Transaction.create(transactionData, { session });
+      query = query.where("date", ">=", startDate).where("date", "<=", endDate);
+    }
 
-      // Update wallet balance
-      const ammount = validatedData.ammount;
-      if (category.type === "income" || category.type === "debt") {
-        wallet.balance += ammount;
-      } else if (category.type === "expense" || category.type === "loan") {
-        wallet.balance -= ammount;
+    // Get all transactions (no pagination) with sorting by date desc
+    const transactions = await query.orderBy("date", "desc").get();
+    const total = transactions.length;
+
+    const income = transactions.reduce((sum, transaction) => {
+      if (
+        transaction.categories &&
+        (transaction.categories.type === "income" ||
+          transaction.categories.type === "debt")
+      ) {
+        return sum + transaction.ammount;
       }
-      await Wallet.where("_id", wallet._id).update(
-        { balance: wallet.balance },
-        { session }
-      ); // Update wallet balance in the same transaction
-    });
+      return sum;
+    }, 0);
 
-    return NextResponse.json(
-      {
-        message: "Transaction created successfully",
+    const expense = transactions.reduce((sum, transaction) => {
+      if (
+        transaction.categories &&
+        (transaction.categories.type === "expense" ||
+          transaction.categories.type === "loan")
+      ) {
+        return sum + transaction.ammount;
+      }
+      return sum;
+    }, 0);
+
+    const netIncome = income - expense;
+
+    return NextResponse.json({
+      message: "Wallet transactions retrieved successfully",
+      summary: {
+        income,
+        expense,
+        netIncome,
       },
-      { status: 201 }
-    );
+      data: transactions,
+      total: total,
+      filter: {
+        month: month || null,
+        year: year || null,
+        category_id: category_id || null,
+        parent_id: parent_id || null,
+      },
+    });
   } catch (error) {
     const { message, status } = errorHandler(error);
     return Response.json({ message }, { status });
