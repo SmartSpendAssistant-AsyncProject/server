@@ -265,6 +265,61 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         remainingAmount = calculatedRemainingAmount;
       }
 
+      // If this transaction has a parent_id, update parent's remaining_amount
+      if (validatedData.parent_id || transaction.parent_id) {
+        const parentId =
+          validatedData.parent_id || transaction.parent_id?.toString();
+
+        if (parentId) {
+          // Get parent transaction
+          const parentTransaction = await Transaction.with("categories")
+            .where("_id", parentId)
+            .first();
+          if (
+            parentTransaction &&
+            parentTransaction.categories &&
+            (parentTransaction.categories.type === "debt" ||
+              parentTransaction.categories.type === "loan")
+          ) {
+            // Get all child transactions for the parent (including this updated one)
+            const allChildTransactions = await Transaction.where(
+              "parent_id",
+              parentId
+            ).get();
+
+            // Calculate total payments from all children
+            let totalChildPayments = 0;
+            for (const child of allChildTransactions) {
+              if (child._id.toString() === id) {
+                // Use the new amount for this transaction being updated
+                totalChildPayments += validatedData.ammount;
+              } else {
+                // Use existing amount for other children
+                totalChildPayments += child.ammount;
+              }
+            }
+
+            // Calculate new remaining amount for parent
+            const newParentRemainingAmount =
+              parentTransaction.ammount - totalChildPayments;
+
+            // Validate that remaining amount doesn't go negative
+            if (newParentRemainingAmount < 0) {
+              throw new CustomError(
+                `Total child payments (${totalChildPayments}) would exceed parent ${parentTransaction.categories.type} amount (${parentTransaction.ammount}). Cannot update transaction.`,
+                400
+              );
+            }
+
+            // Update parent transaction's remaining_amount
+            await Transaction.where("_id", parentId).update(
+              { remaining_ammount: newParentRemainingAmount },
+              { session }
+            );
+          }
+        }
+      }
+
       const transactionData = {
         name: validatedData.name,
         description: validatedData.description,
