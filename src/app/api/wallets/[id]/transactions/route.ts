@@ -1,19 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import Transaction, { ITransaction } from "@/models/Transaction";
+import Transaction from "@/models/Transaction";
 import Wallet from "@/models/Wallet";
 import { ObjectId } from "mongodb";
 import errorHandler from "@/helpers/handleError";
 import CustomError from "@/helpers/CustomError";
-import { ICategory } from "@/models/Category";
 
 interface RouteParams {
   params: {
     id: string;
   };
-}
-
-interface ITransactionWithCategories extends ITransaction {
-  categories: ICategory;
 }
 
 // GET /api/wallets/[id]/transactions - Get transactions for specific wallet
