@@ -1,0 +1,1 @@
+throw new CustomError('Unauthorized', 401);
