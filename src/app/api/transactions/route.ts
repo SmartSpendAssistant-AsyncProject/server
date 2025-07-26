@@ -220,9 +220,9 @@ export async function GET(request: NextRequest) {
 
     const income = transactions.reduce((sum, transaction) => {
       if (
-        transaction.categories &&
-        (transaction.categories.type === "income" ||
-          transaction.categories.type === "debt")
+        transaction.category &&
+        (transaction.category.type === "income" ||
+          transaction.category.type === "debt")
       ) {
         return sum + transaction.ammount;
       }
@@ -231,9 +231,9 @@ export async function GET(request: NextRequest) {
 
     const expense = transactions.reduce((sum, transaction) => {
       if (
-        transaction.categories &&
-        (transaction.categories.type === "expense" ||
-          transaction.categories.type === "loan")
+        transaction.category &&
+        (transaction.category.type === "expense" ||
+          transaction.category.type === "loan")
       ) {
         return sum + transaction.ammount;
       }
