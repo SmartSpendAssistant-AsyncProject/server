@@ -49,7 +49,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       throw new CustomError("Invalid transaction ID", 400);
     }
 
-    const transaction = await Transaction.with("categories")
+    const transaction = await Transaction.with("category")
       .with("wallet")
       .with("parent")
       .with("children")
@@ -115,7 +115,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       throw new CustomError("Invalid message ID format", 400);
     }
 
-    const transaction = await Transaction.with("categories")
+    const transaction = await Transaction.with("category")
       .where("_id", id)
       .first();
     if (!transaction) {
@@ -272,7 +272,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
         if (parentId) {
           // Get parent transaction
-          const parentTransaction = await Transaction.with("categories")
+          const parentTransaction = await Transaction.with("category")
             .where("_id", parentId)
             .first();
           if (
@@ -366,7 +366,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       throw new CustomError("Invalid transaction ID", 400);
     }
 
-    const transaction = await Transaction.with("categories")
+    const transaction = await Transaction.with("category")
       .with("children")
       .where("_id", id)
       .first();
@@ -386,7 +386,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         const parentId = transaction.parent_id.toString();
 
         // Get parent transaction
-        const parentTransaction = await Transaction.with("categories")
+        const parentTransaction = await Transaction.with("category")
           .where("_id", parentId)
           .first();
 

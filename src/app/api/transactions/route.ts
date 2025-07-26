@@ -138,7 +138,7 @@ export async function GET(request: NextRequest) {
     const year = searchParams.get("year"); // Format: YYYY
 
     // Start with transactions from this specific wallet
-    let query = Transaction.with("wallet").with("categories");
+    let query = Transaction.with("wallet").with("category");
 
     // Apply filters
     if (wallet_id) {
