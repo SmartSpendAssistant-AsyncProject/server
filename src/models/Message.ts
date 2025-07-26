@@ -6,12 +6,14 @@ import {
 } from "mongoloquent";
 import User from "./User";
 import Room from "./Room";
+import Wallet from "./Wallet";
 
 export interface IMessage extends IMongoloquentSchema, IMongoloquentTimestamps {
   text: string;
   chat_status: string;
   user_id?: ObjectId;
   room_id: ObjectId;
+  wallet_id?: ObjectId;
 }
 
 export default class Message extends Model<IMessage> {
@@ -28,6 +30,9 @@ export default class Message extends Model<IMessage> {
   }
   public room() {
     return this.belongsTo(Room, "room_id");
+  }
+  public wallet() {
+    return this.belongsTo(Wallet, "wallet_id");
   }
   // ...
 }
