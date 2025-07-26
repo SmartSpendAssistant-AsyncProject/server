@@ -277,9 +277,9 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
             .first();
           if (
             parentTransaction &&
-            parentTransaction.categories &&
-            (parentTransaction.categories.type === "debt" ||
-              parentTransaction.categories.type === "loan")
+            parentTransaction.category &&
+            (parentTransaction.category.type === "debt" ||
+              parentTransaction.category.type === "loan")
           ) {
             // Get all child transactions for the parent (including this updated one)
             const allChildTransactions = await Transaction.where(
@@ -306,7 +306,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
             // Validate that remaining amount doesn't go negative
             if (newParentRemainingAmount < 0) {
               throw new CustomError(
-                `Total child payments (${totalChildPayments}) would exceed parent ${parentTransaction.categories.type} amount (${parentTransaction.ammount}). Cannot update transaction.`,
+                `Total child payments (${totalChildPayments}) would exceed parent ${parentTransaction.category.type} amount (${parentTransaction.ammount}). Cannot update transaction.`,
                 400
               );
             }
@@ -392,9 +392,9 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 
         if (
           parentTransaction &&
-          parentTransaction.categories &&
-          (parentTransaction.categories.type === "debt" ||
-            parentTransaction.categories.type === "loan")
+          parentTransaction.category &&
+          (parentTransaction.category.type === "debt" ||
+            parentTransaction.category.type === "loan")
         ) {
           // Get all OTHER child transactions for the parent (excluding this one being deleted)
           const remainingChildTransactions = await Transaction.where(
@@ -449,15 +449,15 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       // Update wallet balance for main transaction
       const ammount = transaction.ammount;
       if (
-        transaction.categories &&
-        (transaction.categories.type === "income" ||
-          transaction.categories.type === "debt")
+        transaction.category &&
+        (transaction.category.type === "income" ||
+          transaction.category.type === "debt")
       ) {
         wallet.balance -= ammount;
       } else if (
-        transaction.categories &&
-        (transaction.categories.type === "expense" ||
-          transaction.categories.type === "loan")
+        transaction.category &&
+        (transaction.category.type === "expense" ||
+          transaction.category.type === "loan")
       ) {
         wallet.balance += ammount;
       }
