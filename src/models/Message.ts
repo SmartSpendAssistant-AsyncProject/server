@@ -10,7 +10,7 @@ import Room from "./Room";
 export interface IMessage extends IMongoloquentSchema, IMongoloquentTimestamps {
   text: string;
   chat_status: string;
-  user_id: ObjectId;
+  user_id?: ObjectId;
   room_id: ObjectId;
 }
 
