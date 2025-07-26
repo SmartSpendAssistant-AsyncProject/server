@@ -9,9 +9,9 @@ import { DB } from "mongoloquent";
 import { z } from "zod";
 
 interface RouteParams {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
 // Validation schema for updating transactions
@@ -37,7 +37,7 @@ const updateTransactionSchema = z.object({
 // GET /api/transactions/[id] - Get transaction by ID
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    const { id } = params;
+    const { id } = await params;
 
     // Get user_id from middleware header
     const user_id = request.headers.get("x-user-id");
@@ -76,7 +76,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 // PUT /api/transactions/[id] - Update transaction by ID
 export async function PUT(request: NextRequest, { params }: RouteParams) {
   try {
-    const { id } = params;
+    const { id } = await params;
     const body = await request.json();
 
     // Validate input data with Zod
@@ -354,7 +354,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 // DELETE /api/transactions/[id] - Delete transaction by ID
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
-    const { id } = params;
+    const { id } = await params;
 
     // Get user_id from middleware header
     const user_id = request.headers.get("x-user-id");

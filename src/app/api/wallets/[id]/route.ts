@@ -25,15 +25,15 @@ const updateWalletSchema = z.object({
 });
 
 interface RouteParams {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
 // GET /api/wallets/[id] - Get wallet by ID
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    const { id } = params;
+    const { id } = await params;
 
     // Get user_id from middleware header
     const user_id = request.headers.get("x-user-id");
@@ -68,7 +68,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 // PUT /api/wallets/[id] - Update wallet by ID
 export async function PUT(request: NextRequest, { params }: RouteParams) {
   try {
-    const { id } = params;
+    const { id } = await params;
     const body = await request.json();
 
     // Get user_id from middleware header
@@ -114,7 +114,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 // DELETE /api/wallets/[id] - Delete wallet by ID
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
-    const { id } = params;
+    const { id } = await params;
 
     // Get user_id from middleware header
     const user_id = request.headers.get("x-user-id");

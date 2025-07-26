@@ -6,15 +6,15 @@ import errorHandler from "@/helpers/handleError";
 import CustomError from "@/helpers/CustomError";
 
 interface RouteParams {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
 // GET /api/wallets/[id]/transactions - Get transactions for specific wallet
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    const { id } = params;
+    const { id } = await params;
 
     // Get user_id from middleware header
     const user_id = request.headers.get("x-user-id");
