@@ -8,7 +8,11 @@ const JWT_SECRET: string = process.env.JWT_SECRET || '';
 export async function middleware(req: NextRequest) {
   try {
     if (req.nextUrl.pathname.startsWith('/api')) {
-      if (!req.nextUrl.pathname.startsWith('/api/login') && !req.nextUrl.pathname.startsWith('/api/register')) {
+      if (
+        !req.nextUrl.pathname.startsWith('/api/login') &&
+        !req.nextUrl.pathname.startsWith('/api/register') &&
+        !req.nextUrl.pathname.startsWith('/api/confirmations')
+      ) {
         // From request Header
         const authHeader = req.headers.get('authorization');
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
