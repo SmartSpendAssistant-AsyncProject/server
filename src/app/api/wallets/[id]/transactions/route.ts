@@ -44,7 +44,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     const year = searchParams.get("year"); // Format: YYYY
 
     // Start with transactions from this specific wallet
-    let query = Transaction.with("categories").where(
+    let query = Transaction.with("category").where(
       "wallet_id",
       new ObjectId(id)
     );

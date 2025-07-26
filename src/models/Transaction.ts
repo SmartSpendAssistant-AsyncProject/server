@@ -35,7 +35,7 @@ export default class Transaction extends Model<ITransaction> {
   public wallet() {
     return this.belongsTo(Wallet, "wallet_id");
   }
-  public categories() {
+  public category() {
     return this.belongsTo(Category, "category_id");
   }
   public parent() {
