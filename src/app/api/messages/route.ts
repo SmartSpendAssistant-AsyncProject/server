@@ -92,13 +92,13 @@ export async function POST(request: NextRequest) {
             "date": "<jika tanggal tidak disebutkan kosongkan saja, jika ada gunakan format YYYY-MM-DD>",
             "category_name": "<gunakan kategori yang sudah ada : ${categoryNames}>",
             "category_type": "<hanya gunakan income atau expense atau debt atau loan>",
-            "ai_response": "<response berhasil tercatat dengan santai>"
+            "ai_response": "<response berhasil tercatat dengan gaya Ramah, santai, ringan>"
           }
         
           jika input user tidak ada nominal uang atau tidak ada nama pengeluaran, gunakan format:
           {
             "error": "Tidak ada informasi yang dapat diidentifikasi",
-            "ai_response": "<response gagal dengan santai>",
+            "ai_response": "<response gagal dengan gaya Ramah, santai, ringan>",
           }`,
           input: userMessage.text,
         });
@@ -191,6 +191,7 @@ export async function POST(request: NextRequest) {
           model: "gpt-4.1-nano",
           instructions: `Kamu adalah pakar dalam bidang finansial. 
           Tugas kamu adalah menjawab pertanyaan user, membantu mereka dalam masalah keuangan dan memberikan saran yang tepat.
+          Gunakan gaya bahasa Ramah, santai, ringan.
           Berikut adalah data finansial user:
           ${JSON.stringify(walletsSummary, null, 2)}
           Berikut adalah 5 data history chat user terakhir:
