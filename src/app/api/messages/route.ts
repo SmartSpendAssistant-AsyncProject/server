@@ -21,7 +21,7 @@ const messageSchema = z.object({
     .min(1, "Message text cannot be empty")
     .max(1000, "Message text must not exceed 1000 characters"),
   chat_status: z.string().nonempty("Chat status is required"),
-  Wallet_id: z.string().nonempty("Wallet ID is required"),
+  wallet_id: z.string().nonempty("Wallet ID is required"),
 });
 
 // POST /api/messages - Create new message
@@ -45,14 +45,14 @@ export async function POST(request: NextRequest) {
     // Validate input data
     const validatedData = messageSchema.parse(body);
 
-    // Validate ObjectId format for Wallet_id
-    if (!ObjectId.isValid(validatedData.Wallet_id)) {
+    // Validate ObjectId format for wallet_id
+    if (!ObjectId.isValid(validatedData.wallet_id)) {
       throw new CustomError("Invalid wallet ID format", 400);
     }
     // Check if wallet belongs to user
     const wallet = await Wallet.where(
       "_id",
-      new ObjectId(validatedData.Wallet_id)
+      new ObjectId(validatedData.wallet_id)
     )
       .where("user_id", new ObjectId(user_id))
       .first();
@@ -72,6 +72,7 @@ export async function POST(request: NextRequest) {
         chat_status: validatedData.chat_status,
         user_id: new ObjectId(user_id),
         room_id: room._id,
+        wallet_id: new ObjectId(validatedData.wallet_id),
       };
 
       // Create messages
@@ -115,6 +116,7 @@ export async function POST(request: NextRequest) {
             chat_status: "input",
             user_id: undefined, // AI messages do not have a user_id
             room_id: room._id,
+            wallet_id: new ObjectId(validatedData.wallet_id),
           },
           { session }
         );
@@ -154,7 +156,7 @@ export async function POST(request: NextRequest) {
             ammount: aiResponse.ammount,
             date: transactionDate,
             category_id: category._id,
-            wallet_id: new ObjectId(validatedData.Wallet_id),
+            wallet_id: new ObjectId(validatedData.wallet_id),
             remaining_ammount,
             parent_id: undefined, // No parent transaction for new transactions
             message_id: aiMessage._id,
@@ -179,7 +181,7 @@ export async function POST(request: NextRequest) {
         }
       } else if (userMessage.chat_status === "ask") {
         const walletsSummary = await summarizeUserWallet(
-          new ObjectId(validatedData.Wallet_id)
+          new ObjectId(validatedData.wallet_id)
         );
         console.log("🚀 ~ POST ~ walletSSummary:", walletsSummary);
         const chatHistory = await latestChatMessage(room._id);
@@ -208,6 +210,7 @@ export async function POST(request: NextRequest) {
             chat_status: "ask",
             user_id: undefined, // AI messages do not have a user_id
             room_id: room._id,
+            wallet_id: new ObjectId(validatedData.wallet_id),
           },
           { session }
         );
@@ -351,87 +354,99 @@ async function latestChatMessage(room_id: ObjectId) {
 }
 
 // GET /api/messages - Get all messages for user's rooms
-// export async function GET(request: NextRequest) {
-//   try {
-//     // Get user_id from middleware header
-//     const user_id = request.headers.get("x-user-id");
-//     if (!user_id || !ObjectId.isValid(user_id)) {
-//       throw new CustomError("Invalid user ID", 400);
-//     }
+export async function GET(request: NextRequest) {
+  try {
+    // Get user_id from middleware header
+    const user_id = request.headers.get("x-user-id");
+    if (!user_id || !ObjectId.isValid(user_id)) {
+      throw new CustomError("Invalid user ID", 400);
+    }
 
-//     const { searchParams } = new URL(request.url);
-//     const room_id = searchParams.get("room_id");
-//     const limit = parseInt(searchParams.get("limit") || "50");
-//     const offset = parseInt(searchParams.get("offset") || "0");
+    const { searchParams } = new URL(request.url);
+    const wallet_id = searchParams.get("wallet_id");
+    const chat_status = searchParams.get("chat_status");
+    const limit = parseInt(searchParams.get("limit") || "50");
+    const offset = parseInt(searchParams.get("offset") || "0");
 
-//     // Start with messages query
-//     let query = Message.with("user").with("room");
+    // Validate chat_status if provided
+    if (chat_status && !["input", "ask"].includes(chat_status)) {
+      throw new CustomError("Invalid chat_status. Use 'input' or 'ask'", 400);
+    }
 
-//     // If room_id is provided, filter by room and verify ownership
-//     if (room_id) {
-//       if (!ObjectId.isValid(room_id)) {
-//         throw new CustomError("Invalid room ID format", 400);
-//       }
+    // Get user's rooms
+    const userRoom = await Room.where("user_id", new ObjectId(user_id)).first();
+    console.log("🚀 ~ GET ~ userRoom:", userRoom);
 
-//       // Check if room belongs to user
-//       const room = await Room.where("_id", new ObjectId(room_id))
-//         .where("user_id", new ObjectId(user_id))
-//         .first();
+    if (!userRoom) {
+      return NextResponse.json({
+        message: "Messages retrieved successfully",
+        data: [],
+        total: 0,
+        pagination: {
+          limit,
+          offset,
+          //   hasMore: false,
+        },
+      });
+    }
 
-//       if (!room) {
-//         throw new CustomError("Room not found or unauthorized access", 404);
-//       }
+    // Start with messages query from user's room
+    let query = Message.with("user").with("room");
+    query = query.where("room_id", userRoom._id);
 
-//       query = query.where("room_id", new ObjectId(room_id));
-//     } else {
-//       // If no room_id provided, get messages from all user's rooms
-//       const userRooms = await Room.where(
-//         "user_id",
-//         new ObjectId(user_id)
-//       ).get();
-//       const roomIds = userRooms.map((room) => room._id);
+    // Filter by chat_status if provided
+    if (chat_status) {
+      query = query.where("chat_status", chat_status);
+    }
 
-//       if (roomIds.length === 0) {
-//         return NextResponse.json({
-//           message: "Messages retrieved successfully",
-//           data: [],
-//           total: 0,
-//           pagination: {
-//             limit,
-//             offset,
-//             hasMore: false,
-//           },
-//         });
-//       }
+    // Filter by wallet_id if provided
+    if (wallet_id) {
+      if (!ObjectId.isValid(wallet_id)) {
+        throw new CustomError("Invalid wallet ID format", 400);
+      }
 
-//       query = query.whereIn("room_id", roomIds);
-//     }
+      // Check if wallet belongs to user
+      const wallet = await Wallet.where("_id", new ObjectId(wallet_id))
+        .where("user_id", new ObjectId(user_id))
+        .first();
 
-//     // Get total count for pagination
-//     const totalQuery = query.clone();
-//     const total = (await totalQuery.get()).length;
+      if (!wallet) {
+        throw new CustomError("Wallet not found or unauthorized access", 404);
+      }
 
-//     // Apply pagination and sorting
-//     const messages = await query
-//       .orderBy("created_at", "desc")
-//       .skip(offset)
-//       .limit(limit)
-//       .get();
+      // Filter messages by wallet_id directly
+      query = query.where("wallet_id", new ObjectId(wallet_id));
+    }
 
-//     const hasMore = offset + limit < total;
+    // Apply pagination and sorting - get latest messages first
+    const messages = await query
+      .orderBy("createdAt", "desc")
+      .skip(offset)
+      .limit(limit)
+      .get();
 
-//     return NextResponse.json({
-//       message: "Messages retrieved successfully",
-//       data: messages,
-//       total,
-//       pagination: {
-//         limit,
-//         offset,
-//         hasMore,
-//       },
-//     });
-//   } catch (error) {
-//     const { message, status } = errorHandler(error);
-//     return Response.json({ message }, { status });
-//   }
-// }
+    // Reverse the array to show oldest first to user (like chat apps)
+    const reversedMessages = messages.reverse();
+
+    const total = messages.length;
+
+    // const hasMore = offset + limit < total;
+
+    return NextResponse.json({
+      message: "Messages retrieved successfully",
+      data: reversedMessages,
+      total, // Total messages in this query
+      pagination: {
+        limit,
+        offset,
+      },
+      filter: {
+        wallet_id: wallet_id || null,
+        chat_status: chat_status || null,
+      },
+    });
+  } catch (error) {
+    const { message, status } = errorHandler(error);
+    return Response.json({ message }, { status });
+  }
+}
