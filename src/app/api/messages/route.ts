@@ -375,6 +375,7 @@ export async function GET(request: NextRequest) {
 
     // Get user's rooms
     const userRoom = await Room.where("user_id", new ObjectId(user_id)).first();
+    console.log("🚀 ~ GET ~ userRoom:", userRoom);
 
     if (!userRoom) {
       return NextResponse.json({
@@ -417,12 +418,15 @@ export async function GET(request: NextRequest) {
       query = query.where("wallet_id", new ObjectId(wallet_id));
     }
 
-    // Apply pagination and sorting
+    // Apply pagination and sorting - get latest messages first
     const messages = await query
       .orderBy("createdAt", "desc")
       .skip(offset)
       .limit(limit)
       .get();
+
+    // Reverse the array to show oldest first to user (like chat apps)
+    const reversedMessages = messages.reverse();
 
     const total = messages.length;
 
@@ -430,7 +434,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       message: "Messages retrieved successfully",
-      data: messages,
+      data: reversedMessages,
       total, // Total messages in this query
       pagination: {
         limit,
