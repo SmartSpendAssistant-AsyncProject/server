@@ -47,5 +47,8 @@ export default class Transaction extends Model<ITransaction> {
   public message() {
     return this.belongsTo(Message, "message_id");
   }
+  public debtTransactions() {
+    return this.belongsTo(Category, "category_id", "_id").where("type", "debt");
+  }
   // ...
 }

@@ -5,6 +5,7 @@ import {
   IMongoloquentTimestamps,
 } from "mongoloquent";
 import User from "./User";
+import Transaction from "./Transaction";
 
 export interface ICategory
   extends IMongoloquentSchema,
@@ -25,6 +26,9 @@ export default class Category extends Model<ICategory> {
   protected $collection: string = "categories";
   public user() {
     return this.belongsTo(User, "user_id");
+  }
+  public transactions() {
+    return this.hasMany(Transaction, "category_id", "_id");
   }
   // ...
 }

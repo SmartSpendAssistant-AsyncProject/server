@@ -7,6 +7,7 @@ import { ObjectId } from "mongodb";
 import Category from "@/models/Category";
 import CustomError from "@/helpers/CustomError";
 import { DB } from "mongoloquent";
+import Notification from "@/models/Notification";
 
 // Validation schema
 const transactionSchema = z.object({
@@ -103,10 +104,33 @@ export async function POST(request: NextRequest) {
       } else if (category.type === "expense" || category.type === "loan") {
         wallet.balance -= ammount;
       }
-      await Wallet.where("_id", wallet._id).update(
-        { balance: wallet.balance },
-        { session }
-      ); // Update wallet balance in the same transaction
+      const walletNew = await Wallet.with("user")
+        .where("_id", wallet._id)
+        .update({ balance: wallet.balance }, { session });
+
+      if (walletNew && walletNew?.balance <= walletNew?.threshold) {
+        const notification = await Notification.create({
+          user_id: walletNew.user_id,
+          title: "wallet_balance_alert",
+          description: "Your wallet balance is below the threshold",
+        });
+        const message = {
+          to: walletNew?.user?.token,
+          sound: "default",
+          title: "Wallet Balance Alert",
+          body: "Your wallet balance is below the threshold",
+          data: { notification },
+        };
+        await fetch("https://exp.host/--/api/v2/push/send", {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "Accept-encoding": "gzip, deflate",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(message),
+        });
+      }
     });
 
     return NextResponse.json(
@@ -242,12 +266,47 @@ export async function GET(request: NextRequest) {
 
     const netIncome = income - expense;
 
+    const debtCategories = await Category.where("type", "debt")
+      .where("user_id", new ObjectId(user_id))
+      .get();
+    const listDebtCategories = debtCategories.map((category) => category._id);
+    console.log("🚀 ~ GET ~ listDebtCategories:", listDebtCategories);
+
+    const loanCategories = await Category.where("type", "loan")
+      .where("user_id", new ObjectId(user_id))
+      .get();
+    const listLoanCategories = loanCategories.map((category) => category._id);
+
+    const summaryAllDebtTransactions = await Transaction.whereIn(
+      "category_id",
+      listDebtCategories
+    ).get();
+
+    const summaryAllLoanTransactions = await Transaction.whereIn(
+      "category_id",
+      listLoanCategories
+    ).get();
+
+    const totalDebt = summaryAllDebtTransactions.reduce(
+      (sum, transaction) => sum + transaction.remaining_ammount,
+      0
+    );
+
+    const totalLoan = summaryAllLoanTransactions.reduce(
+      (sum, transaction) => sum + transaction.remaining_ammount,
+      0
+    );
+
     return NextResponse.json({
       message: "Wallet transactions retrieved successfully",
-      summary: {
+      summaryData: {
         income,
         expense,
         netIncome,
+      },
+      summayAllTransactions: {
+        totalDebt,
+        totalLoan,
       },
       data: transactions,
       total: total,
