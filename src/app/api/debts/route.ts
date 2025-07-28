@@ -16,8 +16,9 @@ export async function GET(req: NextRequest) {
     const listCategory = category.map((e) => e._id);
 
     const debts = await Transaction.with('category').whereIn('category_id', listCategory).get();
+    const remainingDebts = debts.filter((e) => e.remaining_ammount > 0);
 
-    return NextResponse.json(debts);
+    return NextResponse.json(remainingDebts);
   } catch (error) {
     const { message, status } = errorHandler(error);
     return Response.json({ message }, { status });
