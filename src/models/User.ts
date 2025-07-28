@@ -18,6 +18,7 @@ export interface IUser extends IMongoloquentSchema, IMongoloquentTimestamps {
   password: string;
   status?: string;
   trial_due_date?: string;
+  token?: string; // Optional, used for authentication
 }
 
 export default class User extends Model<IUser> {
