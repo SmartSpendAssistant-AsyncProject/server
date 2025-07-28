@@ -8,6 +8,9 @@ import Category from "@/models/Category";
 import CustomError from "@/helpers/CustomError";
 import { DB } from "mongoloquent";
 import Notification from "@/models/Notification";
+import OpenAI from "openai";
+
+const client = new OpenAI();
 
 // Validation schema
 const transactionSchema = z.object({
@@ -109,10 +112,24 @@ export async function POST(request: NextRequest) {
         .update({ balance: wallet.balance }, { session });
 
       if (walletNew && walletNew?.balance <= walletNew?.threshold) {
+        const response = await client.responses.create({
+          model: "gpt-4.1",
+          input: `Buatkan push notification ketika saldo user di bawah ${walletNew?.threshold}, dengan gaya santai dan menyemangati.
+          Ballance user saat ini: ${walletNew?.balance}.
+          PENTING! hanya gunakan format JSON untuk output, jangan tambahkan teks lain selain JSON contoh:
+          {
+            "title": "title alert wallet balance",
+            "description": "deskripsi alert wallet balance",
+          }
+          `,
+        });
+
+        const aiResponse = JSON.parse(response.output_text);
+
         const notification = await Notification.create({
           user_id: walletNew.user_id,
-          title: "wallet_balance_alert",
-          description: "Your wallet balance is below the threshold",
+          title: aiResponse.title,
+          description: aiResponse.description,
         });
         const message = {
           to: walletNew?.user?.token,
