@@ -134,8 +134,8 @@ export async function POST(request: NextRequest) {
         const message = {
           to: walletNew?.user?.token,
           sound: "default",
-          title: "Wallet Balance Alert",
-          body: "Your wallet balance is below the threshold",
+          title: aiResponse.title,
+          body: aiResponse.description,
           data: { notification },
         };
         await fetch("https://exp.host/--/api/v2/push/send", {
