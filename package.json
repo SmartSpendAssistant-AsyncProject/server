@@ -16,10 +16,11 @@
     "mongodb": "^6.18.0",
     "mongoloquent": "^3.4.4",
     "next": "15.4.3",
+    "openai": "^5.10.2",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "xendit-node": "^7.0.0",
-    "zod": "^4.0.5"
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",

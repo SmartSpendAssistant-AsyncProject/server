@@ -1,15 +1,19 @@
-import { NextRequest, NextResponse } from 'next/server';
-import User from '@/models/User';
-import errorHandler from '@/helpers/handleError';
-import { z } from 'zod';
-import { comparePassword } from '@/helpers/bcrypt';
-import CustomError from '@/helpers/CustomError';
-import * as jose from 'jose';
+import { NextRequest, NextResponse } from "next/server";
+import User from "@/models/User";
+import errorHandler from "@/helpers/handleError";
+import { z } from "zod";
+import { comparePassword } from "@/helpers/bcrypt";
+import CustomError from "@/helpers/CustomError";
+import * as jose from "jose";
 
 // Validation schema for login
 const loginSchema = z.object({
-  email: z.string().nonempty('Email is required').email('Please provide a valid email address'),
-  password: z.string().nonempty('Password is required')
+  email: z
+    .string()
+    .nonempty("Email is required")
+    .email("Please provide a valid email address"),
+  password: z.string().nonempty("Password is required"),
+  token: z.string().optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -20,28 +24,37 @@ export async function POST(request: NextRequest) {
     const validatedData = loginSchema.parse(body);
 
     // Find user by email
-    const user = await User.where('email', validatedData.email).first();
+    const user = await User.where("email", validatedData.email).first();
 
     if (!user) {
-      throw new CustomError('Invalid email or password', 401);
+      throw new CustomError("Invalid email or password", 401);
     }
 
     // Check if password matches
-    const isPasswordValid = comparePassword(validatedData.password, user.password);
+    const isPasswordValid = comparePassword(
+      validatedData.password,
+      user.password
+    );
 
     if (!isPasswordValid) {
-      throw new CustomError('Invalid email or password', 401);
+      throw new CustomError("Invalid email or password", 401);
     }
 
     const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET);
     const _id: string = user._id.toString();
 
-    const token = await new jose.SignJWT({ _id }).setProtectedHeader({ alg: 'HS256' }).sign(JWT_SECRET);
+    const token = await new jose.SignJWT({ _id })
+      .setProtectedHeader({ alg: "HS256" })
+      .sign(JWT_SECRET);
+
+    await User.where("_id", user._id).update({
+      token: validatedData.token,
+    });
 
     return NextResponse.json(
       {
-        message: 'Login successful',
-        access_token: token
+        message: "Login successful",
+        access_token: token,
       },
       { status: 200 }
     );

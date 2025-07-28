@@ -11,7 +11,7 @@ export interface INotification
     IMongoloquentTimestamps {
   title: string;
   description: string;
-  isRead: boolean;
+  isRead?: boolean;
   user_id: ObjectId;
 }
 
@@ -24,6 +24,11 @@ export default class Notification extends Model<INotification> {
   public static $schema: INotification;
 
   protected $collection: string = "notifications";
+
+  protected $attributes: Partial<INotification> = {
+    isRead: false,
+  };
+
   public user() {
     return this.belongsTo(User, "user_id");
   }

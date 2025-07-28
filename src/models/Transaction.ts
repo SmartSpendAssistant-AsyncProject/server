@@ -20,7 +20,7 @@ export interface ITransaction
   parent_id?: ObjectId;
   remaining_ammount: number;
   message_id?: ObjectId;
-  categories?: ICategory; // Optional, populated via relationships
+  category?: ICategory; // Optional, populated via relationships
 }
 
 export default class Transaction extends Model<ITransaction> {
@@ -35,7 +35,7 @@ export default class Transaction extends Model<ITransaction> {
   public wallet() {
     return this.belongsTo(Wallet, "wallet_id");
   }
-  public categories() {
+  public category() {
     return this.belongsTo(Category, "category_id");
   }
   public parent() {
@@ -46,6 +46,9 @@ export default class Transaction extends Model<ITransaction> {
   }
   public message() {
     return this.belongsTo(Message, "message_id");
+  }
+  public debtTransactions() {
+    return this.belongsTo(Category, "category_id", "_id").where("type", "debt");
   }
   // ...
 }

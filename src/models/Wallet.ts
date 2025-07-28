@@ -5,7 +5,7 @@ import {
   IMongoloquentTimestamps,
   IMongoloquentSoftDelete,
 } from "mongoloquent";
-import User from "./User";
+import User, { IUser } from "./User";
 
 export interface IWallet
   extends IMongoloquentSchema,
@@ -18,6 +18,7 @@ export interface IWallet
   target: number;
   threshold: number;
   user_id: ObjectId;
+  user?: IUser; // Optional, populated via relationships
 }
 
 export default class Wallet extends Model<IWallet> {
