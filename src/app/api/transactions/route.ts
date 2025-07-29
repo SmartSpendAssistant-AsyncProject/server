@@ -205,6 +205,13 @@ export async function GET(request: NextRequest) {
         throw new CustomError("Invalid category ID format", 400);
       }
       query = query.where("category_id", new ObjectId(category_id));
+    } else {
+      const category = await Category.where(
+        "user_id",
+        new ObjectId(user_id)
+      ).get();
+      const listCategory = category.map((e) => e._id);
+      query = query.whereIn("category_id", listCategory);
     }
 
     if (parent_id) {
