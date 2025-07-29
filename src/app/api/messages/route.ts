@@ -331,6 +331,7 @@ async function summarizeUserWallet(wallet_id: ObjectId) {
     currentMonth: month,
     currentMonthIncome,
     currentMonthExpense,
+    currentMonthNetIncome: currentMonthIncome - currentMonthExpense,
     categoryExpenseSummaryCurrentMonth: categoryExpenseSummary || {},
     categoryIncomeSummaryCurrentMonth: categoryIncomeSummary || {},
     targetBalanceOrGoal: wallet.target || 0,
