@@ -9,6 +9,7 @@ import CustomError from "@/helpers/CustomError";
 import { DB } from "mongoloquent";
 import Notification from "@/models/Notification";
 import OpenAI from "openai";
+import User from "@/models/User";
 
 const client = new OpenAI();
 
@@ -107,11 +108,14 @@ export async function POST(request: NextRequest) {
       } else if (category.type === "expense" || category.type === "loan") {
         wallet.balance -= ammount;
       }
-      const walletNew = await Wallet.with("user")
-        .where("_id", wallet._id)
-        .update({ balance: wallet.balance }, { session });
+      const walletNew = await Wallet.where("_id", wallet._id).update(
+        { balance: wallet.balance },
+        { session }
+      );
 
       if (walletNew && walletNew?.balance <= walletNew?.threshold) {
+        const user = await User.where("_id", walletNew.user_id).first();
+
         const response = await client.responses.create({
           model: "gpt-4.1",
           input: `Buatkan push notification ketika saldo user di bawah ${walletNew?.threshold}, dengan gaya santai dan menyemangati.
@@ -120,8 +124,8 @@ export async function POST(request: NextRequest) {
           {
             "title": "title alert wallet balance",
             "description": "deskripsi alert wallet balance",
-          }
-          `,
+            }
+            `,
         });
 
         const aiResponse = JSON.parse(response.output_text);
@@ -131,8 +135,9 @@ export async function POST(request: NextRequest) {
           title: aiResponse.title,
           description: aiResponse.description,
         });
+        console.log("🚀 ~ POST ~ walletNew:", user);
         const message = {
-          to: walletNew?.user?.token,
+          to: user?.token,
           sound: "default",
           title: aiResponse.title,
           body: aiResponse.description,
