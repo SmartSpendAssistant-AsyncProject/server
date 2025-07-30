@@ -8,6 +8,10 @@ import Category from "@/models/Category";
 import CustomError from "@/helpers/CustomError";
 import { DB } from "mongoloquent";
 import Notification from "@/models/Notification";
+import OpenAI from "openai";
+import User from "@/models/User";
+
+const client = new OpenAI();
 
 // Validation schema
 const transactionSchema = z.object({
@@ -104,21 +108,39 @@ export async function POST(request: NextRequest) {
       } else if (category.type === "expense" || category.type === "loan") {
         wallet.balance -= ammount;
       }
-      const walletNew = await Wallet.with("user")
-        .where("_id", wallet._id)
-        .update({ balance: wallet.balance }, { session });
+      const walletNew = await Wallet.where("_id", wallet._id).update(
+        { balance: wallet.balance },
+        { session }
+      );
 
       if (walletNew && walletNew?.balance <= walletNew?.threshold) {
+        const user = await User.where("_id", walletNew.user_id).first();
+
+        const response = await client.responses.create({
+          model: "gpt-4.1",
+          input: `Buatkan push notification ketika saldo user di bawah ${walletNew?.threshold}, dengan gaya santai dan menyemangati.
+          Ballance user saat ini: ${walletNew?.balance}.
+          PENTING! hanya gunakan format JSON untuk output, jangan tambahkan teks lain selain JSON contoh:
+          {
+            "title": "title alert wallet balance",
+            "description": "deskripsi alert wallet balance",
+            }
+            `,
+        });
+
+        const aiResponse = JSON.parse(response.output_text);
+
         const notification = await Notification.create({
           user_id: walletNew.user_id,
-          title: "wallet_balance_alert",
-          description: "Your wallet balance is below the threshold",
+          title: aiResponse.title,
+          description: aiResponse.description,
         });
+        console.log("🚀 ~ POST ~ walletNew:", user);
         const message = {
-          to: walletNew?.user?.token,
+          to: user?.token,
           sound: "default",
-          title: "Wallet Balance Alert",
-          body: "Your wallet balance is below the threshold",
+          title: aiResponse.title,
+          body: aiResponse.description,
           data: { notification },
         };
         await fetch("https://exp.host/--/api/v2/push/send", {
@@ -188,6 +210,13 @@ export async function GET(request: NextRequest) {
         throw new CustomError("Invalid category ID format", 400);
       }
       query = query.where("category_id", new ObjectId(category_id));
+    } else {
+      const category = await Category.where(
+        "user_id",
+        new ObjectId(user_id)
+      ).get();
+      const listCategory = category.map((e) => e._id);
+      query = query.whereIn("category_id", listCategory);
     }
 
     if (parent_id) {

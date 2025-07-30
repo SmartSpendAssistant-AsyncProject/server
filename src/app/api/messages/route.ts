@@ -82,26 +82,29 @@ export async function POST(request: NextRequest) {
         const response = await client.responses.create({
           model: "gpt-4.1-nano",
           instructions: `Tugas kamu adalah mengubah kalimat user menjadi data transaksi keuangan.
+jika kamu menemukan pola ambigu dia masuk type debt atau loan gunakan panduan berikut:
+Debt: hutang saya = hutang, pinjam, minjem, ngutang, bon
+Loan: piutang saya = pinjamkan, minjemin, utangin, bonin
 
-          identifikasi kategori transaksi dari kalimat user.
-          PENTING! hanya gunakan format JSON untuk output, jangan tambahkan teks lain selain JSON contoh:
-          {
-            "name": "Pembayaran listrik",
-            "description": "Pembayaran tagihan listrik bulan ini",
-            "ammount": 150000,
-            "date": "<jika tanggal tidak disebutkan kosongkan saja, jika ada gunakan format YYYY-MM-DD>",
-            "category_name": "<gunakan kategori yang sudah ada : ${categoryNames}>",
-            "category_type": "<hanya gunakan income atau expense atau debt atau loan>",
-            "ai_response": "<response berhasil tercatat dengan gaya Ramah, santai, ringan>"
-          }
-        
-          jika input user tidak ada nominal uang atau tidak ada nama pengeluaran, gunakan format:
-          {
-            "error": "Tidak ada informasi yang dapat diidentifikasi",
-            "ai_response": "<response gagal dengan gaya Ramah, santai, ringan>",
-          }`,
+PENTING! Hanya gunakan format JSON untuk output, jangan tambahkan teks lain selain JSON contoh:
+{
+  "name": "Pembayaran listrik",
+  "description": "Pembayaran tagihan listrik bulan ini",
+  "ammount": 150000,
+  "date": "<jika tanggal tidak disebutkan kosongkan saja, jika ada gunakan format YYYY-MM-DD>",
+  "category_name": "<gunakan kategori yang sudah ada : ${categoryNames}>",
+  "category_type": "<HANYA gunakan: income atau expense atau debt atau loan>",
+  "ai_response": "<response berhasil tercatat dengan gaya Ramah, santai, ringan>"
+}
+
+Jika input user tidak ada nominal uang atau tidak ada nama transaksi yang jelas, gunakan format:
+{
+  "error": "Tidak ada informasi yang dapat diidentifikasi",
+  "ai_response": "<response gagal dan minta user untuk lebih spesifik dengan nominal dan jenis transaksi>",
+}`,
           input: userMessage.text,
         });
+        console.log("🚀 ~ POST ~ userMessage:", userMessage.text);
         console.log("AI Response:", response);
         if (!response.output_text) {
           throw new CustomError("AI response is empty", 500);
@@ -124,18 +127,27 @@ export async function POST(request: NextRequest) {
         // If AI response contains transaction data, create transaction
         if (aiResponse.name && aiResponse.ammount && aiResponse.category_name) {
           // Validate category ownership
-          const category = await Category.where(
-            "name",
-            aiResponse.category_name
-          )
+          let category = await Category.where("name", aiResponse.category_name)
             .where("user_id", new ObjectId(user_id))
             .first();
 
           if (!category) {
-            throw new CustomError(
-              "Category not found or unauthorized access",
-              404
-            );
+            if (
+              aiResponse.category_type !== "income" &&
+              aiResponse.category_type !== "expense" &&
+              aiResponse.category_type !== "debt" &&
+              aiResponse.category_type !== "loan"
+            ) {
+              throw new CustomError(
+                "Category not found or unauthorized access",
+                404
+              );
+            }
+            category = await Category.create({
+              name: aiResponse.category_name,
+              user_id: new ObjectId(user_id),
+              type: aiResponse.category_type,
+            });
           }
 
           const transactionDate = aiResponse.date
@@ -331,6 +343,7 @@ async function summarizeUserWallet(wallet_id: ObjectId) {
     currentMonth: month,
     currentMonthIncome,
     currentMonthExpense,
+    currentMonthNetIncome: currentMonthIncome - currentMonthExpense,
     categoryExpenseSummaryCurrentMonth: categoryExpenseSummary || {},
     categoryIncomeSummaryCurrentMonth: categoryIncomeSummary || {},
     targetBalanceOrGoal: wallet.target || 0,
