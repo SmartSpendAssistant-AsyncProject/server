@@ -83,22 +83,37 @@ export async function POST(request: NextRequest) {
           model: "gpt-4.1-nano",
           instructions: `Tugas kamu adalah mengubah kalimat user menjadi data transaksi keuangan.
 
-          identifikasi kategori transaksi dari kalimat user.
-          PENTING! hanya gunakan format JSON untuk output, jangan tambahkan teks lain selain JSON contoh:
+          jika kamu menemukan pola ambigu dia masuk type debt atau loan gunakan panduan berikut:
+          DEBT (Hutang - Uang yang saya pinjam dari orang lain):
+          - "Saya hutang ke teman" = DEBT
+          - "Pinjam uang dari kakak" = DEBT  
+          - "Hutang di warung" = DEBT
+          - "Bon makan di kantin" = DEBT
+          - "Ngutang sama tetangga" = DEBT
+          - "Kredit barang di toko" = DEBT
+          - "minjem uang ke teman" = DEBT
+          
+          LOAN (Piutang - Uang yang saya pinjamkan ke orang lain):
+          - "Kasih pinjaman ke teman" = LOAN
+          - "Minjemin uang ke adik" = LOAN
+          - "Pinjamkan dana ke rekan" = LOAN
+          - "Utangin teman" = LOAN
+          
+          PENTING! Hanya gunakan format JSON untuk output, jangan tambahkan teks lain selain JSON contoh:
           {
             "name": "Pembayaran listrik",
             "description": "Pembayaran tagihan listrik bulan ini",
             "ammount": 150000,
             "date": "<jika tanggal tidak disebutkan kosongkan saja, jika ada gunakan format YYYY-MM-DD>",
             "category_name": "<gunakan kategori yang sudah ada : ${categoryNames}>",
-            "category_type": "<hanya gunakan income atau expense atau debt atau loan>",
+            "category_type": "<HANYA gunakan: income atau expense atau debt atau loan>",
             "ai_response": "<response berhasil tercatat dengan gaya Ramah, santai, ringan>"
           }
         
-          jika input user tidak ada nominal uang atau tidak ada nama pengeluaran, gunakan format:
+          Jika input user tidak ada nominal uang atau tidak ada nama transaksi yang jelas, gunakan format:
           {
             "error": "Tidak ada informasi yang dapat diidentifikasi",
-            "ai_response": "<response gagal dengan gaya Ramah, santai, ringan>",
+            "ai_response": "<response gagal dengan gaya Ramah, santai, ringan. Minta user untuk lebih spesifik dengan nominal dan jenis transaksi>",
           }`,
           input: userMessage.text,
         });
